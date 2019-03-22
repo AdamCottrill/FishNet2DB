@@ -1,1 +1,70 @@
 * Merge FishNet-II Projects into a Single Relational Database
+
+
+Files in this directory are intended to extract fishnet archives and
+compile them into a single ms access database.  There are current
+three distinct steps, each represented by a single script.
+
+There use to be several scripts, they have now been merged into a
+single script that can be run from the command line.
+
+*Always work on on copies the FN archives!!!!*
+
+* Usage
+
+*NOTE* this has not been implemented yet!!!
+
+The script takes a single manditory argument - the path to the fishnet
+archive, followed by several optional arguments
+
+-z - should the files be the archive be recursively unzipped?
+Defaults to True. This is not necessary if the archive is already
+uncompressed.  Files in zip archives will not be processed if they are
+note unzipped.
+
+-v verbose - should progress be printed to the screen?. Defaults to TRUE
+When true, the script reports the name of the directories being
+unzipped or inserted in the sqlite database and the name of the tables
+that are being created in the final MS access database.
+
+-a append - should the data be appended to the MS access data or
+should new tables be created?  *WARNING - This feature is not fully tested and
+may not work.*
+
+#+BEGIN_SRC shell
+
+> python main.py <path_to_archive> -z True -v TRUE -a FALSE
+
+#+END_SRC
+
+
+
+* Output
+
+The script produces three files in the archive directory:
+
++ fn2db.log
++ FN_Projects.db
++ FN_Projects.mdb
+
+** fn2db.log
+- this is a simple text file that serves as the log for the pro
+cess.
+  If there are nay errors, they should be written to this file.
+
+** FN_Projects.db
+- this is a SQLITE database that serves as an intermediate datastore.
+  The dbf files from the fishnet archive are pushed into this database
+  'as-is'. Tables, and columns in the tables are added as necessary as
+  teh data is processed.
+
+** FN_Projects.mdb
+
+This is the final ms access database that contain all of the tables
+from the fishnet archives. it should contain all tables, including
+intermediate and intern l tables that may not be of interest to
+you. These tables can be quickly removed during post-processing.
+
+*NOTE* - this data is recreated OR cleared out before each run.  If
+you are processing multiple archives, move or rename this file between
+runs.

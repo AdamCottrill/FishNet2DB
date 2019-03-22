@@ -24,83 +24,112 @@ A. Cottrill
 
 '''
 
-import dbfread
 import logging
 import os
 import re
+import pypyodbc
+import sqlite3
+import zipfile
+
+# our utilities
+import fn2db
+import utils as sql2mdb
 
 
-from fn2db import *
+#TODO - make these command line arguments.
 
-#  LAKE HURON
-LAKE = 'Huron'
-#LAKE = 'Superior'
+FN_DIR = "C:/Users/COTTRILLAD/Documents/1work/ScrapBook/AOFRC-334-GEN"
+DBASE = os.path.join(FN_DIR, "FN_Projects.db")
+TRG_MDB = os.path.join(FN_DIR, "FN_Projects.mdb")
 
-if LAKE == 'Huron':
-    DBASE = 'c:/1work/ScrapBook/lhmu_warehouse.db'
-    #FN_DIR = 'C:/1work/ScrapBook/fish_net_sc/SC'
-    FN_DIR = 'E:/Fishnet/Data'
-else:
-    DBASE = 'c:/1work/ScrapBook/lsmu_warehouse.db'
-    FN_DIR = 'E:/LakeSuperior/DATA'
+UNZIP = True
+VERBOSE = True
+APPEND = False
 
+
+#  ===========================================
+#                 UNZIP
+
+if UNZIP:
+    for path, dir_list, file_list in os.walk(FN_DIR):
+        for file_name in file_list:
+            if file_name.lower().endswith(".zip"):
+                abs_file_path = os.path.join(path, file_name)
+
+                parent_path = os.path.split(abs_file_path)[0]
+                output_folder_name = os.path.splitext(abs_file_path)[0]
+                output_path = os.path.join(parent_path, output_folder_name)
+                if VERBOSE:
+                    pretty_fname = abs_file_path.replace(
+                        os.path.split(FN_DIR)[0], '~').replace('/', '\\')
+                    print("Unzipping {}".format(pretty_fname))
+                zip_obj = zipfile.ZipFile(abs_file_path, 'r')
+                zip_obj.extractall(output_path)
+                zip_obj.close()
+    if VERBOSE:
+        print("Done unzipping archives....")
+
+
+#  ===========================================
+#             DBF -> SQLite
+
+# compiling fishnet *.dbf files into sqlite database.
+
+if VERBOSE:
+    print("Reading dbf files....")
 
 proj_pattern = r"[A-Z]{2}\d{2}_([A-Z]|\d){3}$"
 
-logfile = os.path.join(os.path.split(DBASE)[0],
-                       'fn2db_{}.log'.format(LAKE))
-logging.basicConfig(filename=logfile,level=logging.DEBUG)
+logfile = os.path.join(os.path.split(DBASE)[0], 'fn2db.log')
+logging.basicConfig(filename=logfile, level=logging.DEBUG)
 
-#get a list of all directories in FN_DIR - recursively moves down
-#the directory structure
+# get a list of all directories in FN_DIR - recursively moves down
+# the directory structure
 directories = [x[0] for x in os.walk(FN_DIR)
                if re.search(proj_pattern, x[0])]
 
 for proj_dir in directories:
-    #prj_root = os.path.split(proj_dir)[1]
-    file_names = get_dbf_files(proj_dir)
-    dbfs = [os.path.join(proj_dir,x) for x in file_names]
+    # prj_root = os.path.split(proj_dir)[1]
+    file_names = fn2db.get_dbf_files(proj_dir)
+    dbfs = [os.path.join(proj_dir, x) for x in file_names]
     for dbf_file in dbfs:
-        table_name = get_dbf_table_name(dbf_file)
-        #some dbf files start with numbers - can't happen in real db
+        table_name = fn2db.get_dbf_table_name(dbf_file)
+        # some dbf files start with numbers - can't happen in real db
         if re.match('[0-9]', table_name):
-            #add an 'x' onto those table names
+            # add an 'x' onto those table names
             table_name = 'X' + table_name
-        table = read_dbf(dbf_file, encoding='latin1')
+        table = fn2db.read_dbf(dbf_file, encoding='latin1')
         if table is None:
-            #if the table is empty, there is nothing to do, check the log
+            # if the table is empty, there is nothing to do, check the log
             continue
         else:
             field_names = table.field_names
             field_names.append('DBF_FILE')
-        db_tables = get_db_tables(DBASE)
-        #check the database for this table:
+        db_tables = fn2db.get_db_tables(DBASE)
+        # check the database for this table:
         if table_name.upper() not in db_tables:
-            #if the table does not exist, add it using our fields
-            create_table(DBASE, table_name, field_names)
-        #check the field names in the database with our current data
+            # if the table does not exist, add it using our fields
+            fn2db.create_table(DBASE, table_name, field_names)
+        # check the field names in the database with our current data
+        db_fnames = set(fn2db.get_db_table_fields(DBASE, table_name))
 
-        db_fnames = set(get_db_table_fields(DBASE, table_name))
-
-        #replace any field names that happen to be sql keywords
-        #field_names = ['YSELECT' if x=='SELECT' else x for x in field_names]
+        # replace any field names that happen to be sql keywords
+        # field_names = ['YSELECT' if x=='SELECT' else x for x in field_names]
         missing = set(field_names) - db_fnames
-        #if there are any missing columns, add them
+        # if there are any missing columns, add them
         if missing:
             for fld in missing:
-                add_column(DBASE, table_name, fld)
+                fn2db.add_column(DBASE, table_name, fld)
         try:
-            append_dbf(DBASE, table_name, table, dbf_file)
+            fn2db.append_dbf(DBASE, table_name, table, dbf_file)
         except:
             logging.warning('Problem appending {}'.format(dbf_file))
-    print("Done adding {}".format(proj_dir))
 
 
-
-#================================
+# ================================
 #
-#we missed the DD_PRJ.DBF files because they are above project roots
-#these can be added seperately:
+# we missed the DD_PRJ.DBF files because they are above project roots
+# these can be added seperately:
 #    - search for all DD_PRJ.DBF files
 #    - read each of them in,
 #    - check the db for an appropriate table
@@ -112,31 +141,126 @@ for proj_dir in directories:
 dd_prj_files = []
 
 for path, dirs, files in os.walk(FN_DIR):
-    #for filename in fnmatch.filter(files, pattern):
+    # for filename in fnmatch.filter(files, pattern):
     for filename in files:
         if filename == 'DD_PRJ.DBF':
             dd_prj_files.append(os.path.join(path, filename))
 
-#this is a repeat of the code above
-for dbf_file in dd_prj_files:
-    table_name = get_dbf_table_name(dbf_file)
-    table = read_dbf(dbf_file, encoding='latin1')
-    field_names = table.field_names
-    field_names.append('DBF_FILE')
-    db_tables = get_db_tables(DBASE)
-    #check the database for this table:
-    if table_name not in db_tables:
-        #if the table does not exist, add it using our fields
-        create_table(DBASE, table_name, field_names)
-    #check the field names in the database with our current data
-    db_fnames = set(get_db_table_fields(DBASE, table_name))
-    missing = set(field_names) - db_fnames
-    #if there are any missing columns, add them
-    if missing:
-        for fld in missing:
-            add_column(DBASE, table_name, fld)
-    try:
-        append_dbf(DBASE, table_name, table, dbf_file)
-    except:
-        logging.warning('Problem appending {}'.format(dbf_file))
-    print("Done adding {}".format(dbf_file))
+# this is a repeat of the code above but for dd_prj files (whatever they are).
+if dd_prj_files:
+    for dbf_file in dd_prj_files:
+        table_name = fn2db.get_dbf_table_name(dbf_file)
+        table = fn2db.read_dbf(dbf_file, encoding='latin1')
+        field_names = table.field_names
+        field_names.append('DBF_FILE')
+        db_tables = fn2db.get_db_tables(DBASE)
+        # check the database for this table:
+        if table_name not in db_tables:
+            # if the table does not exist, add it using our fields
+            fn2db.create_table(DBASE, table_name, field_names)
+        # check the field names in the database with our current data
+        db_fnames = set(fn2db.get_db_table_fields(DBASE, table_name))
+        missing = set(field_names) - db_fnames
+
+        # if there are any missing columns, add them
+        if missing:
+            for fld in missing:
+                fn2db.add_column(DBASE, table_name, fld)
+        try:
+            fn2db.append_dbf(DBASE, table_name, table, dbf_file)
+        except:
+            logging.warning('Problem appending {}'.format(dbf_file))
+
+if VERBOSE:
+    print("Done reading dbf files....")
+
+#  ===========================================
+#             SQLite -> MS Access
+
+# get a list of our tables in the SQLite database:
+
+con = sqlite3.connect(DBASE)
+cursor = con.cursor()
+cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+tables = [x[0] for x in cursor.fetchall()]
+
+# prj_cd tables will hold list of tables that contain the field PRJ_CD
+# other tables generally seem to be FISHNET design tables.
+prj_cd_tables = []
+other_tables = []
+sql = 'select * from [{}] limit 1;'
+for table in tables:
+    cursor.execute(sql.format(table))
+    flds = [x[0] for x in cursor.description]
+    if 'PRJ_CD' in flds:
+        prj_cd_tables.append(table)
+    else:
+        other_tables.append(table)
+
+# NOTE: this could be conditional - all tables or just data-tables?
+# drop tables that do not contain the Field PRJ_CD:
+for table in other_tables:
+   print("Dropping {}".format(table))
+   cursor.execute('DROP TABLE {}'.format(table))
+con.commit()
+
+
+# If our target database exists - connect to it, if it doesn't, create it.
+if os.path.isfile(TRG_MDB):
+    constring = r'DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={};'
+    mdbcon = pypyodbc.connect(constring.format(TRG_MDB))
+else:
+    mdbcon = pypyodbc.win_create_mdb(TRG_MDB)
+mdbcur = mdbcon.cursor()
+
+
+if APPEND is False:
+    mdb_tables = [x.get('table_name') for x in mdbcur.tables()
+                  if x.get('table_type') == 'TABLE']
+    print('Deleting existing database tables...')
+    # clear out any existing tables - ms access does not support 'drop if exists'
+    # start with tables at the bottom of our relationship heirarchy:
+    for table in mdb_tables:
+        print("\tDeleting {}".format(table))
+        mdbcur.execute("DROP TABLE [{}];".format(table))
+
+# for each of remaining tables, query each field of
+# each table and remove any fields that do not contain any data (creel
+# specific fields in offshore index database).  build a list of fields
+# with data, starting with our FN key fields then create a tempoary
+# table using those fields and populate it with a select query.
+# Delete the original table and rename, the new, paired down table to
+# its original name.
+
+for table in prj_cd_tables:
+    if APPEND is False:
+        #make the tables
+        sql = "select * from [{}] limit 1"
+        cursor.execute(sql.format(table))
+        flds = [x[0] for x in cursor.description]
+        flds2 = [sql2mdb.get_fld_fndict(x) for x in flds]
+        # flds3 = [format_fld_to_sql(x, True) for x in flds2]
+        flds3 = [sql2mdb.format_fld_to_sql(x, False) for x in flds2]
+        _sql = sql2mdb.build_create_table_sql(table, flds3)
+        mdbcur.execute(_sql)
+
+    cursor.execute('select * from [{}]'.format(table))
+    rs = cursor.fetchall()
+
+    print("inserting data into {}".format(table))
+    insert_sql = sql2mdb.build_sql_insert(table, flds)
+    # mdbcur.executemany(insert_sql, rs)
+    for record in rs:
+        try:
+            record2 = sql2mdb.format_record(record, flds2)
+            mdbcur.execute(insert_sql, record2)
+        except:
+            print('oops!', record)
+
+# close our database connections
+mdbcon.commit()
+mdbcon.close()
+cursor.close()
+con.close()
+
+print('Done!')
