@@ -20,7 +20,7 @@ archive, followed by several optional arguments
 -z - should the files be the archive be recursively unzipped?
 Defaults to True. This is not necessary if the archive is already
 uncompressed.  Files in zip archives will not be processed if they are
-note unzipped.
+not unzipped.
 
 -v verbose - should progress be printed to the screen?. Defaults to TRUE
 When true, the script reports the name of the directories being

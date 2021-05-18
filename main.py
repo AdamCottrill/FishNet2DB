@@ -1,7 +1,6 @@
-'''=============================================================
+"""=============================================================
 c:/1work/Python/FN2db/main.py
 Created: 16 Dec 2014 14:35:49
-
 
 DESCRIPTION:
 
@@ -22,7 +21,7 @@ catch sampling database.
 A. Cottrill
 =============================================================
 
-'''
+"""
 
 import logging
 import os
@@ -35,14 +34,20 @@ import zipfile
 import fn2db
 import utils as sql2mdb
 
+from dbfread.exceptions import MissingMemoFile
 
-#TODO - make these command line arguments.
 
-FN_DIR = "C:/Users/COTTRILLAD/Documents/1work/ScrapBook/AOFRC-334-GEN"
-DBASE = os.path.join(FN_DIR, "FN_Projects.db")
-TRG_MDB = os.path.join(FN_DIR, "FN_Projects.mdb")
+# TODO - make these command line arguments.
 
-UNZIP = True
+# FN_DIR = "E:/LErie_data/Creels"
+# DBASE = os.path.join(FN_DIR, "LEMU_Creel_Projects.db")
+# TRG_MDB = os.path.join(FN_DIR, "LEMU_Creel_Projects.accdb")
+
+FN_DIR = "E:/LOntario_data"
+DBASE = os.path.join(FN_DIR, "LOMU_Projects2.db")
+TRG_MDB = os.path.join(FN_DIR, "LOMU_Projects.accdb")
+
+UNZIP = False
 VERBOSE = True
 APPEND = False
 
@@ -61,9 +66,10 @@ if UNZIP:
                 output_path = os.path.join(parent_path, output_folder_name)
                 if VERBOSE:
                     pretty_fname = abs_file_path.replace(
-                        os.path.split(FN_DIR)[0], '~').replace('/', '\\')
+                        os.path.split(FN_DIR)[0], "~"
+                    ).replace("/", "\\")
                     print("Unzipping {}".format(pretty_fname))
-                zip_obj = zipfile.ZipFile(abs_file_path, 'r')
+                zip_obj = zipfile.ZipFile(abs_file_path, "r")
                 zip_obj.extractall(output_path)
                 zip_obj.close()
     if VERBOSE:
@@ -78,33 +84,45 @@ if UNZIP:
 if VERBOSE:
     print("Reading dbf files....")
 
-proj_pattern = r"[A-Z]{2}\d{2}_([A-Z]|\d){3}$"
+# proj_pattern = r"[A-Z]{2}\d{2}_([A-Z]|\d){3}$"
+# match this SC97__1F or this: LEM/SC97_01F
+proj_pattern = r"[A-Z]{2}\d{2}_(_|[A-Z]|\d)([A-Z]|\d){2}$"
 
-logfile = os.path.join(os.path.split(DBASE)[0], 'fn2db.log')
+logfile = os.path.join(os.path.split(DBASE)[0], "fn2db.log")
 logging.basicConfig(filename=logfile, level=logging.DEBUG)
 
 # get a list of all directories in FN_DIR - recursively moves down
 # the directory structure
-directories = [x[0] for x in os.walk(FN_DIR)
-               if re.search(proj_pattern, x[0])]
+directories = [x[0] for x in os.walk(FN_DIR) if re.search(proj_pattern, x[0])]
 
 for proj_dir in directories:
+
+    if os.path.isdir(os.path.join(proj_dir, "DATA")):
+        proj_dir = os.path.join(proj_dir, "DATA")
+
     # prj_root = os.path.split(proj_dir)[1]
     file_names = fn2db.get_dbf_files(proj_dir)
     dbfs = [os.path.join(proj_dir, x) for x in file_names]
+
     for dbf_file in dbfs:
         table_name = fn2db.get_dbf_table_name(dbf_file)
         # some dbf files start with numbers - can't happen in real db
-        if re.match('[0-9]', table_name):
+        if re.match("[0-9]", table_name):
             # add an 'x' onto those table names
-            table_name = 'X' + table_name
-        table = fn2db.read_dbf(dbf_file, encoding='latin1')
+            table_name = "X" + table_name
+
+        try:
+            table = fn2db.read_dbf(dbf_file, encoding="latin1")
+        except:
+            print("Missing MemoFile: {}".format(dbf_file))
+            continue
+
         if table is None:
             # if the table is empty, there is nothing to do, check the log
             continue
         else:
             field_names = table.field_names
-            field_names.append('DBF_FILE')
+            field_names.append("DBF_FILE")
         db_tables = fn2db.get_db_tables(DBASE)
         # check the database for this table:
         if table_name.upper() not in db_tables:
@@ -123,7 +141,7 @@ for proj_dir in directories:
         try:
             fn2db.append_dbf(DBASE, table_name, table, dbf_file)
         except:
-            logging.warning('Problem appending {}'.format(dbf_file))
+            logging.warning("Problem appending {}".format(dbf_file))
 
 
 # ================================
@@ -143,16 +161,16 @@ dd_prj_files = []
 for path, dirs, files in os.walk(FN_DIR):
     # for filename in fnmatch.filter(files, pattern):
     for filename in files:
-        if filename == 'DD_PRJ.DBF':
+        if filename == "DD_PRJ.DBF":
             dd_prj_files.append(os.path.join(path, filename))
 
 # this is a repeat of the code above but for dd_prj files (whatever they are).
 if dd_prj_files:
     for dbf_file in dd_prj_files:
         table_name = fn2db.get_dbf_table_name(dbf_file)
-        table = fn2db.read_dbf(dbf_file, encoding='latin1')
+        table = fn2db.read_dbf(dbf_file, encoding="latin1")
         field_names = table.field_names
-        field_names.append('DBF_FILE')
+        field_names.append("DBF_FILE")
         db_tables = fn2db.get_db_tables(DBASE)
         # check the database for this table:
         if table_name not in db_tables:
@@ -169,7 +187,7 @@ if dd_prj_files:
         try:
             fn2db.append_dbf(DBASE, table_name, table, dbf_file)
         except:
-            logging.warning('Problem appending {}'.format(dbf_file))
+            logging.warning("Problem appending {}".format(dbf_file))
 
 if VERBOSE:
     print("Done reading dbf files....")
@@ -188,11 +206,11 @@ tables = [x[0] for x in cursor.fetchall()]
 # other tables generally seem to be FISHNET design tables.
 prj_cd_tables = []
 other_tables = []
-sql = 'select * from [{}] limit 1;'
+sql = "select * from [{}] limit 1;"
 for table in tables:
     cursor.execute(sql.format(table))
     flds = [x[0] for x in cursor.description]
-    if 'PRJ_CD' in flds:
+    if "PRJ_CD" in flds:
         prj_cd_tables.append(table)
     else:
         other_tables.append(table)
@@ -200,14 +218,14 @@ for table in tables:
 # NOTE: this could be conditional - all tables or just data-tables?
 # drop tables that do not contain the Field PRJ_CD:
 for table in other_tables:
-   print("Dropping {}".format(table))
-   cursor.execute('DROP TABLE {}'.format(table))
+    print("Dropping {}".format(table))
+    cursor.execute("DROP TABLE [{}]".format(table))
 con.commit()
 
 
 # If our target database exists - connect to it, if it doesn't, create it.
 if os.path.isfile(TRG_MDB):
-    constring = r'DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={};'
+    constring = r"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={};"
     mdbcon = pypyodbc.connect(constring.format(TRG_MDB))
 else:
     mdbcon = pypyodbc.win_create_mdb(TRG_MDB)
@@ -215,9 +233,10 @@ mdbcur = mdbcon.cursor()
 
 
 if APPEND is False:
-    mdb_tables = [x.get('table_name') for x in mdbcur.tables()
-                  if x.get('table_type') == 'TABLE']
-    print('Deleting existing database tables...')
+    mdb_tables = [
+        x.get("table_name") for x in mdbcur.tables() if x.get("table_type") == "TABLE"
+    ]
+    print("Deleting existing database tables...")
     # clear out any existing tables - ms access does not support 'drop if exists'
     # start with tables at the bottom of our relationship heirarchy:
     for table in mdb_tables:
@@ -234,7 +253,7 @@ if APPEND is False:
 
 for table in prj_cd_tables:
     if APPEND is False:
-        #make the tables
+        # make the tables
         sql = "select * from [{}] limit 1"
         cursor.execute(sql.format(table))
         flds = [x[0] for x in cursor.description]
@@ -244,7 +263,7 @@ for table in prj_cd_tables:
         _sql = sql2mdb.build_create_table_sql(table, flds3)
         mdbcur.execute(_sql)
 
-    cursor.execute('select * from [{}]'.format(table))
+    cursor.execute("select * from [{}]".format(table))
     rs = cursor.fetchall()
 
     print("inserting data into {}".format(table))
@@ -255,7 +274,7 @@ for table in prj_cd_tables:
             record2 = sql2mdb.format_record(record, flds2)
             mdbcur.execute(insert_sql, record2)
         except:
-            print('oops!', record)
+            print("oops!", record)
 
 # close our database connections
 mdbcon.commit()
@@ -263,4 +282,4 @@ mdbcon.close()
 cursor.close()
 con.close()
 
-print('Done!')
+print("Done!")
