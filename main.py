@@ -41,7 +41,7 @@ from dbfread.exceptions import MissingMemoFile
 
 # our utilities
 import fn2db
-import utils as sql2mdb
+import sqlite2mdb
 
 # TODO - make these command line arguments.
 parser = argparse.ArgumentParser()
@@ -274,13 +274,13 @@ for table in prj_cd_tables:
     sql = "select * from [{}] limit 1"
     cursor.execute(sql.format(table))
     flds = [x[0] for x in cursor.description]
-    flds_dict = [sql2mdb.get_fld_fndict(x) for x in flds]
+    flds_dict = [sqlite2mdb.get_fld_fndict(x) for x in flds]
 
     if APPEND is False:
         # make the tables
         # flds3 = [format_fld_to_sql(x, True) for x in flds_dict]
-        flds3 = [sql2mdb.format_fld_to_sql(x, False) for x in flds_dict]
-        _sql = sql2mdb.build_create_table_sql(table, flds3)
+        flds3 = [sqlite2mdb.format_fld_to_sql(x, False) for x in flds_dict]
+        _sql = sqlite2mdb.build_create_table_sql(table, flds3)
         print(f"Creating {table}")
         mdbcur.execute(_sql)
 
@@ -288,14 +288,14 @@ for table in prj_cd_tables:
     rs = cursor.fetchall()
 
     print("inserting data into {}".format(table))
-    insert_sql = sql2mdb.build_sql_insert(table, flds)
+    insert_sql = sqlite2mdb.build_sql_insert(table, flds)
     # mdbcur.executemany(insert_sql, rs)
     for record in rs:
         try:
-            record2 = sql2mdb.format_record(record, flds_dict)
+            record2 = sqlite2mdb.format_record(record, flds_dict)
             mdbcur.execute(insert_sql, record2)
         except:
-            msg = "{table} - {','.join(record2)}"
+            msg = f"Inserting into access {table} - {','.join(record2)}"
             logging.warning(msg)
     mdbcon.commit()
 
