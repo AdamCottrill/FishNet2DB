@@ -1,6 +1,12 @@
+import datetime
+import logging
+import os
+import re
+import sqlite3
+
+
 def format_record(record, fld_attrs):
-    """
-    """
+    """ """
     vals = [remove_empty_strings(x) for x in record]
     field_types = [x.get("field_type") for x in fld_attrs]
 
@@ -46,9 +52,7 @@ def remove_empty_strings(x):
 
 
 def convert_to_time(val):
-    """
-    """
-    import datetime
+    """ """
 
     try:
         return datetime.datetime.strptime(val, "%H:%M").time()
@@ -62,11 +66,7 @@ def convert_to_time(val):
 
 
 def convert_to_date(val):
-    """
-    """
-
-    import re
-    import datetime
+    """ """
 
     regex = r"\d{2}\.\d{2}\.\d{2}"
 
@@ -82,8 +82,7 @@ def convert_to_date(val):
 
 
 def convert_to_int(val):
-    """
-    """
+    """ """
     try:
         return int(val)
     except:
@@ -141,8 +140,6 @@ def sanitize_sql(sql):
 
     """
 
-    import re
-
     #  'sqlite':'ms_access'
     sanitize_dict = {
         "\tdate": "\t[date]",
@@ -184,35 +181,34 @@ def get_fld_fndict(fld_name):
 
     """
 
-    import sqlite3
+    default_attrs = {
+        "field_attr": None,
+        "field_name": fld_name,
+        "field_type": "VARCHAR",
+    }
 
-    # hard code for today - throw away code anyway.
-    # db = "X:/flask/ProcValQE/db/ProcValQueries.db"
-    # db = "C:/1work/Python/PyPV/build_orig/exe.win32-3.4/PVQueries.db"
-    # db = "C:/Users/cottrillad/documents/1work/Python/flask/ProcValQE/db/ProcValQueries.db"
-    db = "C:/Users/COTTRILLAD/1work/Python/FN2db/ProcValQueries.db"
-
-    conn = sqlite3.connect(db)
-    cur = conn.cursor()
-
-    sql = """Select upper(field_name) as field_name, field_type, field_attr
-             from field
-             where field_name=upper(?) and field_type is not NULL;"""
-
-    cur.execute(sql, (fld_name,))
-    rs = cur.fetchall()
-
-    if rs:
-        record_count = len(rs)
-        if record_count > 1:
-            msg = "WARNING! {} records returned.  Only the first field used."
-            print(msg.formart(record_count))
-
-        fld = rs[0]
-        col_names = [x[0] for x in cur.description]
-        return {k: v for k, v in zip(col_names, fld)}
+    db = "ProcValQueries.db"
+    if os.path.isfile(db) is False:
+        return default_attrs
     else:
-        return {"field_attr": None, "field_name": fld_name, "field_type": "VARCHAR"}
+
+        conn = sqlite3.connect(db)
+        cur = conn.cursor()
+        sql = """Select upper(field_name) as field_name, field_type, field_attr
+                from field
+                where field_name=upper(?) and field_type is not NULL;"""
+        cur.execute(sql, (fld_name,))
+        rs = cur.fetchall()
+        if rs:
+            record_count = len(rs)
+            if record_count > 1:
+                msg = f"WARNING! {record_count} records returned for {fld_name}.  Only the first field used."
+                logging.warning(msg)
+            fld = rs[0]
+            col_names = [x[0] for x in cur.description]
+            return {k: v for k, v in zip(col_names, fld)}
+        else:
+            return default_attrs
 
 
 def format_fld_to_sql(fld_dict, all_varchar=False):
@@ -262,12 +258,12 @@ def format_fld_to_sql(fld_dict, all_varchar=False):
 
 
 def build_create_table_sql(table, field_desc):
-    """ give a list of sql-formatted fields of the form:
-   '[field_name] field_type', make the create table sql statement:
+    """give a list of sql-formatted fields of the form:
+    '[field_name] field_type', make the create table sql statement:
 
-    Arguments:
-    - `table`:
-    - `field_desc`:
+     Arguments:
+     - `table`:
+     - `field_desc`:
     """
 
     field_part = ",\n".join(field_desc)

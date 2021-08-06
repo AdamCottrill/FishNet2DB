@@ -18,45 +18,63 @@ by removal columns that are unused in those projects.  For example,
 fields specific to creels do no need to be included in the commercial
 catch sampling database.
 
+Usage:
+
+  > python main.py --src_dir=<path_to_your_archive>
+
+  > python main.py --src_dir=<path_to_your_archive> --unzip=True
+
 A. Cottrill
 =============================================================
 
 """
 
+import argparse
 import logging
 import os
 import re
-import pypyodbc
 import sqlite3
 import zipfile
+
+import pypyodbc
+from dbfread.exceptions import MissingMemoFile
 
 # our utilities
 import fn2db
 import utils as sql2mdb
 
-from dbfread.exceptions import MissingMemoFile
-
-
 # TODO - make these command line arguments.
+parser = argparse.ArgumentParser()
+parser.add_argument("--src_dir", "-src", help="Directory containing the FN Archives")
+parser.add_argument("--unzip", "-z", help="Unzip zipped archives. Defaults to False")
+parser.add_argument(
+    "--verbose", "-v", help="Recreate Target Database.  Defaults to True"
+)
+parser.add_argument(
+    "--append",
+    "-a",
+    help="Append contents of D to existing database.  Defaults to False",
+)
 
-# FN_DIR = "E:/LErie_data/Creels"
-# DBASE = os.path.join(FN_DIR, "LEMU_Creel_Projects.db")
-# TRG_MDB = os.path.join(FN_DIR, "LEMU_Creel_Projects.accdb")
+args = parser.parse_args()
+SRC_DIR = args.src_dir
+UNZIP = args.unzip if args.unzip else False
+VERBOSE = args.unzip if args.unzip else True
+APPEND = args.unzip if args.unzip else False
 
-FN_DIR = "E:/LOntario_data"
-DBASE = os.path.join(FN_DIR, "LOMU_Projects2.db")
-TRG_MDB = os.path.join(FN_DIR, "LOMU_Projects.accdb")
 
-UNZIP = False
-VERBOSE = True
-APPEND = False
+DBASE = os.path.join(SRC_DIR, "FN2_Projects.db")
+TRG_MDB = os.path.join(SRC_DIR, "FN2_Projects.accdb")
+
+logfile = os.path.join(os.path.split(DBASE)[0], "fn2db.log")
+logging.basicConfig(filename=logfile, level=logging.DEBUG)
 
 
 #  ===========================================
 #                 UNZIP
 
 if UNZIP:
-    for path, dir_list, file_list in os.walk(FN_DIR):
+    for path, dir_list, file_list in os.walk(SRC_DIR):
         for file_name in file_list:
             if file_name.lower().endswith(".zip"):
                 abs_file_path = os.path.join(path, file_name)
@@ -66,7 +84,7 @@ if UNZIP:
                 output_path = os.path.join(parent_path, output_folder_name)
                 if VERBOSE:
                     pretty_fname = abs_file_path.replace(
-                        os.path.split(FN_DIR)[0], "~"
+                        os.path.split(SRC_DIR)[0], "~"
                     ).replace("/", "\\")
                     print("Unzipping {}".format(pretty_fname))
                 zip_obj = zipfile.ZipFile(abs_file_path, "r")
@@ -88,12 +106,9 @@ if VERBOSE:
 # match this SC97__1F or this: LEM/SC97_01F
 proj_pattern = r"[A-Z]{2}\d{2}_(_|[A-Z]|\d)([A-Z]|\d){2}$"
 
-logfile = os.path.join(os.path.split(DBASE)[0], "fn2db.log")
-logging.basicConfig(filename=logfile, level=logging.DEBUG)
-
-# get a list of all directories in FN_DIR - recursively moves down
+# get a list of all directories in SRC_DIR - recursively moves down
 # the directory structure
-directories = [x[0] for x in os.walk(FN_DIR) if re.search(proj_pattern, x[0])]
+directories = [x[0] for x in os.walk(SRC_DIR) if re.search(proj_pattern, x[0])]
 
 for proj_dir in directories:
 
@@ -158,7 +173,7 @@ for proj_dir in directories:
 
 dd_prj_files = []
 
-for path, dirs, files in os.walk(FN_DIR):
+for path, dirs, files in os.walk(SRC_DIR):
     # for filename in fnmatch.filter(files, pattern):
     for filename in files:
         if filename == "DD_PRJ.DBF":
@@ -169,25 +184,28 @@ if dd_prj_files:
     for dbf_file in dd_prj_files:
         table_name = fn2db.get_dbf_table_name(dbf_file)
         table = fn2db.read_dbf(dbf_file, encoding="latin1")
-        field_names = table.field_names
-        field_names.append("DBF_FILE")
-        db_tables = fn2db.get_db_tables(DBASE)
-        # check the database for this table:
-        if table_name not in db_tables:
-            # if the table does not exist, add it using our fields
-            fn2db.create_table(DBASE, table_name, field_names)
-        # check the field names in the database with our current data
-        db_fnames = set(fn2db.get_db_table_fields(DBASE, table_name))
-        missing = set(field_names) - db_fnames
+        if table is None:
+            logging.warning(f"Problem reading {table_name} in {dbf_file}")
+        else:
+            field_names = table.field_names
+            field_names.append("DBF_FILE")
+            db_tables = fn2db.get_db_tables(DBASE)
+            # check the database for this table:
+            if table_name not in db_tables:
+                # if the table does not exist, add it using our fields
+                fn2db.create_table(DBASE, table_name, field_names)
+            # check the field names in the database with our current data
+            db_fnames = set(fn2db.get_db_table_fields(DBASE, table_name))
+            missing = set(field_names) - db_fnames
 
-        # if there are any missing columns, add them
-        if missing:
-            for fld in missing:
-                fn2db.add_column(DBASE, table_name, fld)
-        try:
-            fn2db.append_dbf(DBASE, table_name, table, dbf_file)
-        except:
-            logging.warning("Problem appending {}".format(dbf_file))
+            # if there are any missing columns, add them
+            if missing:
+                for fld in missing:
+                    fn2db.add_column(DBASE, table_name, fld)
+            try:
+                fn2db.append_dbf(DBASE, table_name, table, dbf_file)
+            except:
+                logging.warning(f"Problem appending {dbf_file}")
 
 if VERBOSE:
     print("Done reading dbf files....")
@@ -224,11 +242,11 @@ con.commit()
 
 
 # If our target database exists - connect to it, if it doesn't, create it.
-if os.path.isfile(TRG_MDB):
-    constring = r"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={};"
-    mdbcon = pypyodbc.connect(constring.format(TRG_MDB))
-else:
+constring = r"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={};"
+if not os.path.isfile(TRG_MDB):
     mdbcon = pypyodbc.win_create_mdb(TRG_MDB)
+
+mdbcon = pypyodbc.connect(constring.format(TRG_MDB))
 mdbcur = mdbcon.cursor()
 
 
@@ -252,15 +270,18 @@ if APPEND is False:
 # its original name.
 
 for table in prj_cd_tables:
+
+    sql = "select * from [{}] limit 1"
+    cursor.execute(sql.format(table))
+    flds = [x[0] for x in cursor.description]
+    flds_dict = [sql2mdb.get_fld_fndict(x) for x in flds]
+
     if APPEND is False:
         # make the tables
-        sql = "select * from [{}] limit 1"
-        cursor.execute(sql.format(table))
-        flds = [x[0] for x in cursor.description]
-        flds2 = [sql2mdb.get_fld_fndict(x) for x in flds]
-        # flds3 = [format_fld_to_sql(x, True) for x in flds2]
-        flds3 = [sql2mdb.format_fld_to_sql(x, False) for x in flds2]
+        # flds3 = [format_fld_to_sql(x, True) for x in flds_dict]
+        flds3 = [sql2mdb.format_fld_to_sql(x, False) for x in flds_dict]
         _sql = sql2mdb.build_create_table_sql(table, flds3)
+        print(f"Creating {table}")
         mdbcur.execute(_sql)
 
     cursor.execute("select * from [{}]".format(table))
@@ -271,10 +292,12 @@ for table in prj_cd_tables:
     # mdbcur.executemany(insert_sql, rs)
     for record in rs:
         try:
-            record2 = sql2mdb.format_record(record, flds2)
+            record2 = sql2mdb.format_record(record, flds_dict)
             mdbcur.execute(insert_sql, record2)
         except:
-            print("oops!", record)
+            msg = "{table} - {','.join(record2)}"
+            logging.warning(msg)
+    mdbcon.commit()
 
 # close our database connections
 mdbcon.commit()

@@ -19,114 +19,17 @@ import subprocess
 import shutil
 import sqlite3
 
-from fn2db import add_column, add_column_sql
-
-
-def run_query(db, sql, fetchone=False):
-    """
-
-    Arguments:
-    - `sql`:
-    """
-    data = {}
-    with sqlite3.connect(db) as con:
-        cursor = con.cursor()
-        cursor.execute(sql)
-        if fetchone:
-            data = cursor.fetchone()
-        else:
-            data = cursor.fetchall()
-    return data
-
-
-def copy_table(src, trg, tablename):
-    """
-
-    Arguments:
-    - `src`:
-    - `trg`:
-    """
-    # cmd = 'sqlite3 "{}" .dump [{}] > sqlite3 "{}"'.format(src, tablename, trg)
-    # subprocess.run(cmd)
-
-    attach = "ATTACH DATABASE '{}' as 'src';".format(src)
-    insert = "INSERT INTO {0} SELECT * FROM src.{0};".format(tablename)
-
-    with sqlite3.connect(trg) as con:
-        cursor = con.cursor()
-        cursor.execute(attach)
-        cursor.execute(insert)
-        con.commit()
-
-
-def get_table_definition(db, tablename):
-    """
-
-    Arguments:
-    - `db`:
-    - `tablename`:
-    """
-    sql = "SELECT sql FROM sqlite_master WHERE name = '{}';".format(tablename)
-
-    with sqlite3.connect(db) as con:
-        cursor = con.cursor()
-        cursor.execute(sql)
-        createsql = cursor.fetchone()
-    return createsql[0]
-
-
-def make_table(src, trgdb, tablename):
-    """
-
-    Arguments:
-    - `trgdb`:
-    - `createsql`:
-    """
-
-    sql = get_table_definition(src, tablename)
-
-    with sqlite3.connect(trgdb) as con:
-        cursor = con.cursor()
-        cursor.execute(sql)
-        con.commit()
-
-
-def get_tables(db):
-    """Get the known table names for this database"""
-    sql = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
-    data = run_query(db, sql)
-    if data:
-        return [x[0] for x in data]
-    else:
-        return []
-
-
-def get_field_names(db, table_name):
-    """Get the known field names for this table.  This could be a cache some day."""
-    # sql = "SELECT * FROM [{}]".format(table_name)
-    sql = "PRAGMA table_info( [{}] );".format(table_name)
-
-    data = run_query(db, sql)
-    if data:
-        return [x[1] for x in data]
-    else:
-        return []
-
-
-def insert_records(trg, src, table, src_fields):
-    # append the data
-
-    columns = ", ".join(["[{}]".format(x) for x in src_fields])
-
-    attach = "ATTACH DATABASE '{}' as 'src';".format(src)
-    insert = "INSERT INTO [{0}]({1}) SELECT {1} FROM src.[{0}];".format(table, columns)
-    # detach = "DETATCH DATABASE 'src';"
-
-    with sqlite3.connect(trg) as con:
-        cursor = con.cursor()
-        cursor.execute(attach)
-        cursor.execute(insert)
-        # cursor.execute(detach)
+from fn2db import (
+    add_column,
+    add_column_sql,
+    get_table_definition,
+    make_table,
+    copy_table,
+    run_query,
+    get_tables,
+    get_fields_names
+    insert_records
+)
 
 
 # =========================================================
@@ -137,6 +40,7 @@ dbs = [
     "C:/Users/COTTRILLAD/1work/ScrapBook/lsmu_warehouse.db",
     "F:/LOntario_data/LOMU_Projects.db",
     "F:/LOntario_data/LOMU_Projects2.db",
+    "F:/LErie_data/parntership/LEMU_Projects.db",
 ]
 # copy the first datbase to the target:
 

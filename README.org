@@ -38,18 +38,16 @@ may not work.*
 #+END_SRC
 
 
-
 * Output
 
 The script produces three files in the archive directory:
 
 + fn2db.log
 + FN_Projects.db
-+ FN_Projects.mdb
++ FN_Projects.accdb
 
 ** fn2db.log
-- this is a simple text file that serves as the log for the pro
-cess.
+- this is a simple text file that serves as the log for the process.
   If there are nay errors, they should be written to this file.
 
 ** FN_Projects.db
@@ -58,13 +56,13 @@ cess.
   'as-is'. Tables, and columns in the tables are added as necessary as
   teh data is processed.
 
-** FN_Projects.mdb
+** FN_Projects.accdb
 
 This is the final ms access database that contain all of the tables
 from the fishnet archives. it should contain all tables, including
-intermediate and intern l tables that may not be of interest to
+intermediate and internal tables that may not be of interest to
 you. These tables can be quickly removed during post-processing.
 
-*NOTE* - this data is recreated OR cleared out before each run.  If
+*NOTE* - this database is recreated OR cleared out before each run.  If
 you are processing multiple archives, move or rename this file between
 runs.
